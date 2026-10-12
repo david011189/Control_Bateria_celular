@@ -16,7 +16,7 @@ Aplicación Android en Kotlin que avisa con un **mensaje de voz al 80 %** cuando
 - Alerta al 80 % con el cargador conectado: **mensaje de voz** "Batería al 80 por ciento. Ya puedes desconectar el cargador." y aviso en la barra de notificaciones.
 - Alerta al 20 % con el cargador desconectado: **mensaje de voz** "Batería baja, al 20 por ciento. Conecta el cargador." y aviso en la barra de notificaciones.
 - Si la voz en español no está disponible o falla, suena un tono de respaldo: el de notificación al 80 % y el de alarma al 20 %.
-- La voz y los tonos usan el volumen de **alarma**, para escucharse aunque el volumen multimedia esté bajo.
+- La voz y los tonos usan el volumen de **alarma**, para escucharse aunque el volumen multimedia esté bajo. Si el volumen de alarma está por debajo del 80 % del máximo, la app lo **sube automáticamente** mientras suena la alerta y luego lo devuelve a su nivel anterior.
 - Histéresis de 2 puntos: la alerta no se repite mientras el nivel oscila alrededor del umbral.
 - El monitoreo se reanuda solo al reiniciar el teléfono o al actualizar la app, si estaba activo.
 - La app no usa internet ni recolecta datos personales.
@@ -92,6 +92,7 @@ Probado en un emulador Pixel 10 y en un Pixel 10 físico, ambos con Android 17 (
 | P8 | 80 % sin la voz en español descargada | ✅ La voz falla y suena el tono de notificación de respaldo |
 | P9 | 20 % con el motor de voz desactivado | ✅ Suena el tono de alarma de respaldo |
 | P10 | Actualizar la app con el monitoreo activo | ✅ El monitoreo se reanuda solo, sin abrir la app |
+| P11 | Alerta con el volumen de alarma en 2 de 7 | ✅ Sube a 6 de 7 mientras habla y se restaura al terminar (probado en el celular) |
 
 Las capturas están en la carpeta [`pruebas/`](pruebas).
 
@@ -109,7 +110,7 @@ adb logcat -s AlertaBateria
 - Si el usuario pulsa "No permitir" en el permiso de notificaciones, Android bloquea todas las notificaciones de la app, incluida la del servicio, hasta que se vuelvan a activar en Ajustes.
 - Si el sistema reinicia el servicio, la alerta podría repetirse una vez, porque el estado de las alertas no se guarda.
 - El modo No molestar puede silenciar el sonido según la configuración del usuario.
-- La voz y los tonos suenan con el **volumen de alarma** del teléfono. Si está muy bajo, la alerta puede pasar desapercibida; conviene subirlo en Ajustes → Sonido → Volumen de alarma.
+- Android no deja que una app baje el volumen de alarma por debajo de su mínimo (3 de 7 en un Pixel). Si el usuario lo tenía más bajo, tras una alerta queda en ese mínimo en lugar de su valor original.
 - El mensaje de voz necesita que el motor de texto a voz del teléfono tenga la voz en español instalada. Google la descarga la primera vez que se usa (requiere internet en ese momento); mientras no esté disponible, suena el tono de respaldo.
 - Para publicar en Google Play hay que justificar el tipo de servicio `specialUse`. Para uso personal o académico no es necesario.
 

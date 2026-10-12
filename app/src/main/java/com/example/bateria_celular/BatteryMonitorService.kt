@@ -11,6 +11,7 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.media.AudioAttributes
+import android.media.AudioManager
 import android.media.Ringtone
 import android.media.RingtoneManager
 import android.os.BatteryManager
@@ -27,6 +28,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import java.util.Locale
+import kotlin.math.ceil
 
 class BatteryMonitorService : Service() {
 
@@ -39,6 +41,7 @@ class BatteryMonitorService : Service() {
         private const val ID_NOTIF_SERVICIO = 1
         private const val ID_NOTIF_ALERTA = 2
         private const val DURACION_SONIDO_MS = 8000L
+        private const val VOLUMEN_ALERTA = 0.8f   // fracción del volumen máximo de alarma
         private const val TAG = "AlertaBateria"
     }
 
@@ -52,6 +55,8 @@ class BatteryMonitorService : Service() {
     // Mensaje (texto y tono de respaldo) que llegó antes de que la voz estuviera lista
     private var mensajePendiente: Pair<String, Int>? = null
     private var ultimoEstado = ""
+    // Volumen de alarma que tenía el usuario antes de subirlo; null si no se cambió
+    private var volumenOriginal: Int? = null
 
     // Recibe ACTION_BATTERY_CHANGED cada vez que cambia el estado de la batería
     private val receptorBateria = object : BroadcastReceiver() {
@@ -102,6 +107,7 @@ class BatteryMonitorService : Service() {
         handler.removeCallbacksAndMessages(null)
         ringtone?.stop()
         tts?.shutdown()
+        restaurarVolumen()
         super.onDestroy()
     }
 
@@ -173,7 +179,9 @@ class BatteryMonitorService : Service() {
                 // (p. ej. voz no descargada): en ese caso se usa el tono de respaldo
                 tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(utteranceId: String?) {}
-                    override fun onDone(utteranceId: String?) {}
+                    override fun onDone(utteranceId: String?) {
+                        handler.post { restaurarVolumen() }
+                    }
 
                     @Deprecated("Requerido por la clase base")
                     override fun onError(utteranceId: String?) = onError(utteranceId, -1)
@@ -203,6 +211,7 @@ class BatteryMonitorService : Service() {
         } else if (ttsListo) {
             handler.removeCallbacksAndMessages(null)
             ringtone?.stop()
+            subirVolumen()
             tts?.speak(texto, TextToSpeech.QUEUE_FLUSH, null, tonoRespaldo.toString())
         } else {
             Log.w(TAG, "Voz no disponible, se reproduce el tono")
@@ -215,6 +224,7 @@ class BatteryMonitorService : Service() {
         ringtone?.stop()
         val uri = RingtoneManager.getDefaultUri(tipo)
             ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+        subirVolumen()
         ringtone = RingtoneManager.getRingtone(this, uri)?.apply {
             audioAttributes = AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_ALARM)
@@ -222,7 +232,41 @@ class BatteryMonitorService : Service() {
                 .build()
             play()
         }
-        handler.postDelayed({ ringtone?.stop() }, DURACION_SONIDO_MS)
+        handler.postDelayed({
+            ringtone?.stop()
+            restaurarVolumen()
+        }, DURACION_SONIDO_MS)
+    }
+
+    // ----- Volumen de alarma -----
+    // Sube el volumen de alarma mientras suena la alerta, si el usuario lo tiene más bajo
+    private fun subirVolumen() {
+        if (volumenOriginal != null) return   // ya está subido por una alerta en curso
+        val am = getSystemService(AudioManager::class.java)
+        val actual = am.getStreamVolume(AudioManager.STREAM_ALARM)
+        val objetivo = ceil(am.getStreamMaxVolume(AudioManager.STREAM_ALARM) * VOLUMEN_ALERTA).toInt()
+        if (actual >= objetivo) return
+        try {
+            am.setStreamVolume(AudioManager.STREAM_ALARM, objetivo, 0)
+            volumenOriginal = actual
+            Log.d(TAG, "Volumen de alarma: $actual -> $objetivo")
+        } catch (e: SecurityException) {
+            Log.w(TAG, "No se pudo subir el volumen de alarma", e)
+        }
+    }
+
+    // Devuelve el volumen de alarma al nivel que tenía el usuario. Android no deja que
+    // una app lo baje de su mínimo (3 de 7 en un Pixel), así que puede quedar en ese mínimo
+    private fun restaurarVolumen() {
+        val original = volumenOriginal ?: return
+        volumenOriginal = null
+        try {
+            getSystemService(AudioManager::class.java)
+                .setStreamVolume(AudioManager.STREAM_ALARM, original, 0)
+            Log.d(TAG, "Volumen de alarma restaurado a $original")
+        } catch (e: SecurityException) {
+            Log.w(TAG, "No se pudo restaurar el volumen de alarma", e)
+        }
     }
 
     private fun crearCanales() {
