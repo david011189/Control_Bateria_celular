@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fitsSystemWindows="true"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <TextView
+        android:id="@+id/tvNivel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Nivel actual: -- %"
+        android:textSize="22sp" />
+
+    <Button
+        android:id="@+id/btnIniciar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:text="Iniciar monitoreo" />
+
+    <Button
+        android:id="@+id/btnDetener"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Detener monitoreo" />
+</LinearLayout>
