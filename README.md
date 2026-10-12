@@ -4,6 +4,7 @@ Aplicación Android en Kotlin que emite una **alerta sonora al 80 %** cuando el 
 
 <p align="center">
   <img src="pruebas/pantalla_principal.png" width="200" alt="Pantalla principal">
+  <img src="pruebas/monitoreo_iniciado.png" width="200" alt="Monitoreo iniciado">
   <img src="pruebas/p1_alerta_80.png" width="200" alt="Alerta al 80 %">
   <img src="pruebas/p3_alerta_20.png" width="200" alt="Alerta al 20 %">
 </p>
@@ -11,7 +12,7 @@ Aplicación Android en Kotlin que emite una **alerta sonora al 80 %** cuando el 
 ## Funcionalidades
 
 - Muestra el nivel de batería actual, actualizado en vivo mientras la app está abierta.
-- Botones para iniciar y detener el monitoreo.
+- Botones para iniciar y detener el monitoreo. Mientras el monitoreo está activo, el botón de inicio se pone verde y dice "Monitoreo iniciado"; el estado se mantiene al cerrar y volver a abrir la app.
 - Alerta al 80 % con el cargador conectado: tono de notificación y aviso "Ya puedes desconectar el cargador".
 - Alerta al 20 % con el cargador desconectado: tono de alarma y aviso "Conecta el cargador".
 - Histéresis de 2 puntos: la alerta no se repite mientras el nivel oscila alrededor del umbral.
@@ -22,7 +23,7 @@ Aplicación Android en Kotlin que emite una **alerta sonora al 80 %** cuando el 
 
 | Clase | Función |
 |---|---|
-| `MainActivity` | Interfaz: muestra el nivel, pide el permiso de notificaciones e inicia o detiene el servicio. |
+| `MainActivity` | Interfaz: muestra el nivel, pide el permiso de notificaciones, inicia o detiene el servicio y refleja el estado en el botón de inicio. |
 | `BatteryMonitorService` | Servicio en primer plano (`specialUse`) que escucha `ACTION_BATTERY_CHANGED`, evalúa los umbrales y reproduce los sonidos con uso de audio `ALARM`. |
 | `BootReceiver` | Vuelve a lanzar el servicio tras `BOOT_COMPLETED` si el monitoreo estaba activo. |
 
@@ -52,7 +53,7 @@ Abre la carpeta del proyecto en Android Studio y ejecuta la configuración `app`
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Al abrir la app, acepta el permiso de notificaciones (Android 13+) y pulsa **Iniciar monitoreo**.
+Al abrir la app, acepta el permiso de notificaciones (Android 13+) y pulsa **Iniciar monitoreo**. El botón cambiará a verde con el texto **Monitoreo iniciado**. Para detenerlo, pulsa **Detener monitoreo** y el botón volverá a su estado original.
 
 ## Probar sin esperar a que cargue la batería
 
