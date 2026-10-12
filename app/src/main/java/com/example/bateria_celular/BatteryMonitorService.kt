@@ -18,11 +18,15 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
+import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
+import java.util.Locale
 
 class BatteryMonitorService : Service() {
 
@@ -35,12 +39,18 @@ class BatteryMonitorService : Service() {
         private const val ID_NOTIF_SERVICIO = 1
         private const val ID_NOTIF_ALERTA = 2
         private const val DURACION_SONIDO_MS = 8000L
+        private const val TAG = "AlertaBateria"
     }
 
     private var alertaAltaEmitida = false
     private var alertaBajaEmitida = false
     private var ringtone: Ringtone? = null
     private val handler = Handler(Looper.getMainLooper())
+    private var tts: TextToSpeech? = null
+    private var ttsListo = false
+    private var ttsIniciando = false
+    private var textoPendiente: String? = null   // mensaje que llegó antes de que la voz estuviera lista
+    private var ultimoEstado = ""
 
     // Recibe ACTION_BATTERY_CHANGED cada vez que cambia el estado de la batería
     private val receptorBateria = object : BroadcastReceiver() {
@@ -50,13 +60,21 @@ class BatteryMonitorService : Service() {
             if (nivel < 0 || escala <= 0) return
             val porcentaje = nivel * 100 / escala
             val conectado = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0
+            // Registra solo los cambios de nivel o de cargador, no cada aviso del sistema
+            val estado = "nivel=$porcentaje conectado=$conectado"
+            if (estado != ultimoEstado) {
+                ultimoEstado = estado
+                Log.d(TAG, estado)
+            }
             evaluar(porcentaje, conectado)
         }
     }
 
     override fun onCreate() {
         super.onCreate()
+        Log.d(TAG, "Servicio iniciado")
         crearCanales()
+        iniciarVoz()
         val notificacion = NotificationCompat.Builder(this, CANAL_SERVICIO)
             .setSmallIcon(android.R.drawable.ic_lock_idle_charging)
             .setContentTitle("Monitor de batería activo")
@@ -78,9 +96,11 @@ class BatteryMonitorService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        Log.d(TAG, "Servicio detenido")
         unregisterReceiver(receptorBateria)
         handler.removeCallbacksAndMessages(null)
         ringtone?.stop()
+        tts?.shutdown()
         super.onDestroy()
     }
 
@@ -92,9 +112,9 @@ class BatteryMonitorService : Service() {
             emitirAlerta(
                 "Batería al $porcentaje %",
                 "Ya puedes desconectar el cargador.",
-                RingtoneManager.TYPE_NOTIFICATION,
                 android.R.drawable.ic_lock_idle_charging
             )
+            hablar("Batería al $porcentaje por ciento. Ya puedes desconectar el cargador.")
         }
         if (!conectado || porcentaje < UMBRAL_ALTO - MARGEN) alertaAltaEmitida = false
 
@@ -104,14 +124,15 @@ class BatteryMonitorService : Service() {
             emitirAlerta(
                 "Batería baja: $porcentaje %",
                 "Conecta el cargador.",
-                RingtoneManager.TYPE_ALARM,
                 android.R.drawable.ic_lock_idle_low_battery
             )
+            reproducirSonido(RingtoneManager.TYPE_ALARM)
         }
         if (conectado || porcentaje > UMBRAL_BAJO + MARGEN) alertaBajaEmitida = false
     }
 
-    private fun emitirAlerta(titulo: String, texto: String, tipoSonido: Int, icono: Int) {
+    private fun emitirAlerta(titulo: String, texto: String, icono: Int) {
+        Log.d(TAG, "Alerta: $titulo")
         val notif = NotificationCompat.Builder(this, CANAL_ALERTAS)
             .setSmallIcon(icono)
             .setContentTitle(titulo)
@@ -123,7 +144,61 @@ class BatteryMonitorService : Service() {
             ActivityCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
             PackageManager.PERMISSION_GRANTED
         if (puedeNotificar) NotificationManagerCompat.from(this).notify(ID_NOTIF_ALERTA, notif)
-        reproducirSonido(tipoSonido)
+    }
+
+    // ----- Mensaje de voz -----
+    private fun iniciarVoz() {
+        ttsIniciando = true
+        tts = TextToSpeech(this) { estado ->
+            ttsIniciando = false
+            if (estado == TextToSpeech.SUCCESS) {
+                val resultado = tts?.setLanguage(Locale.forLanguageTag("es-PE"))
+                    ?: TextToSpeech.LANG_NOT_SUPPORTED
+                ttsListo = resultado >= TextToSpeech.LANG_AVAILABLE
+                // Se escucha con el volumen de alarma, aunque el multimedia esté bajo
+                tts?.setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ALARM)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build()
+                )
+                // El idioma puede figurar como disponible y aun así fallar al hablar
+                // (p. ej. voz no descargada): en ese caso se usa el tono de respaldo
+                tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) {}
+                    override fun onDone(utteranceId: String?) {}
+
+                    @Deprecated("Requerido por la clase base")
+                    override fun onError(utteranceId: String?) = onError(utteranceId, -1)
+
+                    override fun onError(utteranceId: String?, errorCode: Int) {
+                        Log.w(TAG, "La voz falló (código=$errorCode), se reproduce el tono")
+                        handler.post { reproducirSonido(RingtoneManager.TYPE_NOTIFICATION) }
+                    }
+                })
+                Log.d(TAG, "Voz lista=$ttsListo (idioma=$resultado)")
+            } else {
+                Log.w(TAG, "No se pudo iniciar la voz (estado=$estado)")
+            }
+            textoPendiente?.let { texto ->
+                textoPendiente = null
+                hablar(texto)
+            }
+        }
+    }
+
+    private fun hablar(texto: String) {
+        if (ttsIniciando) {
+            textoPendiente = texto
+        } else if (ttsListo) {
+            handler.removeCallbacksAndMessages(null)
+            ringtone?.stop()
+            tts?.speak(texto, TextToSpeech.QUEUE_FLUSH, null, "alerta_bateria")
+        } else {
+            // Sin voz en español disponible, se usa el tono como respaldo
+            Log.w(TAG, "Voz no disponible, se reproduce el tono")
+            reproducirSonido(RingtoneManager.TYPE_NOTIFICATION)
+        }
     }
 
     private fun reproducirSonido(tipo: Int) {

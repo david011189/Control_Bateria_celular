@@ -8,7 +8,10 @@ import androidx.core.content.ContextCompat
 class BootReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
+        // Al reiniciar el teléfono o al actualizar la app, Android detiene el servicio
+        if (intent.action != Intent.ACTION_BOOT_COMPLETED &&
+            intent.action != Intent.ACTION_MY_PACKAGE_REPLACED
+        ) return
         val prefs = context.getSharedPreferences("config", Context.MODE_PRIVATE)
         if (prefs.getBoolean("monitor_activo", false)) {
             ContextCompat.startForegroundService(

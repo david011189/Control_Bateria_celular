@@ -13,19 +13,20 @@ Aplicación Android en Kotlin que emite una **alerta sonora al 80 %** cuando el 
 
 - Muestra el nivel de batería actual, actualizado en vivo mientras la app está abierta.
 - Botones para iniciar y detener el monitoreo. Mientras el monitoreo está activo, el botón de inicio se pone verde y dice "Monitoreo iniciado"; el estado se mantiene al cerrar y volver a abrir la app.
-- Alerta al 80 % con el cargador conectado: tono de notificación y aviso "Ya puedes desconectar el cargador".
+- Alerta al 80 % con el cargador conectado: **mensaje de voz** "Batería al 80 por ciento. Ya puedes desconectar el cargador." y aviso en la barra de notificaciones. Si la voz en español no está disponible o falla, suena un tono de respaldo.
 - Alerta al 20 % con el cargador desconectado: tono de alarma y aviso "Conecta el cargador".
+- La voz y los tonos usan el volumen de **alarma**, para escucharse aunque el volumen multimedia esté bajo.
 - Histéresis de 2 puntos: la alerta no se repite mientras el nivel oscila alrededor del umbral.
-- El monitoreo se reanuda solo al reiniciar el teléfono si estaba activo.
-- Sin conexión a internet y sin recolectar datos personales.
+- El monitoreo se reanuda solo al reiniciar el teléfono o al actualizar la app, si estaba activo.
+- La app no usa internet ni recolecta datos personales.
 
 ## Cómo funciona
 
 | Clase | Función |
 |---|---|
 | `MainActivity` | Interfaz: muestra el nivel, pide el permiso de notificaciones, inicia o detiene el servicio y refleja el estado en el botón de inicio. |
-| `BatteryMonitorService` | Servicio en primer plano (`specialUse`) que escucha `ACTION_BATTERY_CHANGED`, evalúa los umbrales y reproduce los sonidos con uso de audio `ALARM`. |
-| `BootReceiver` | Vuelve a lanzar el servicio tras `BOOT_COMPLETED` si el monitoreo estaba activo. |
+| `BatteryMonitorService` | Servicio en primer plano (`specialUse`) que escucha `ACTION_BATTERY_CHANGED`, evalúa los umbrales, dice el mensaje de voz con `TextToSpeech` y reproduce el tono de alarma, ambos con uso de audio `ALARM`. |
+| `BootReceiver` | Vuelve a lanzar el servicio tras `BOOT_COMPLETED` (reinicio) y `MY_PACKAGE_REPLACED` (actualización de la app) si el monitoreo estaba activo. |
 
 La app no consulta el nivel en bucle: solo reacciona a los avisos del sistema, por lo que su consumo es despreciable.
 
@@ -74,20 +75,31 @@ adb shell dumpsys battery set level 20
 adb shell dumpsys battery reset
 ```
 
-### Resultados en emulador
+### Resultados de las pruebas
 
-Probado en un emulador Pixel 10 con Android 17 (API 37):
+Probado en un emulador Pixel 10 y en un Pixel 10 físico, ambos con Android 17 (API 37):
 
 | Caso | Prueba | Resultado |
 |---|---|---|
-| P1 | Conectado, el nivel sube de 79 % a 80 % | ✅ Suena y aparece "Batería al 80 %" |
+| P1 | Conectado, el nivel sube de 79 % a 80 % | ✅ Se escucha la alerta y aparece "Batería al 80 %" |
 | P2 | Conectado, el nivel pasa a 81 %, 79 % y 80 % | ✅ No vuelve a sonar |
 | P3 | Desconectado, el nivel baja de 21 % a 20 % | ✅ Suena y aparece "Batería baja: 20 %" |
 | P4 | En 20 %, se conecta el cargador | ✅ No suena; la alerta se rearma |
 | P5 | Reiniciar con el monitoreo activo | ✅ Reaparece la notificación del servicio |
 | P6 | Rechazar el permiso de notificaciones | ✅ Suena, pero no se muestra la notificación |
+| P7 | 80 % con la voz en español disponible | ✅ Se escucha el mensaje de voz (probado en el celular) |
+| P8 | 80 % sin la voz en español descargada | ✅ La voz falla y suena el tono de respaldo |
+| P9 | Actualizar la app con el monitoreo activo | ✅ El monitoreo se reanuda solo, sin abrir la app |
 
 Las capturas están en la carpeta [`pruebas/`](pruebas).
+
+### Diagnóstico
+
+El servicio registra en el log del sistema cuándo arranca o se detiene, cada cambio de nivel o de cargador y cada alerta, con la etiqueta `AlertaBateria`. Para verlos con el teléfono conectado:
+
+```bash
+adb logcat -s AlertaBateria
+```
 
 ## Limitaciones conocidas
 
@@ -95,6 +107,8 @@ Las capturas están en la carpeta [`pruebas/`](pruebas).
 - Si el usuario pulsa "No permitir" en el permiso de notificaciones, Android bloquea todas las notificaciones de la app, incluida la del servicio, hasta que se vuelvan a activar en Ajustes.
 - Si el sistema reinicia el servicio, la alerta podría repetirse una vez, porque el estado de las alertas no se guarda.
 - El modo No molestar puede silenciar el sonido según la configuración del usuario.
+- La voz y los tonos suenan con el **volumen de alarma** del teléfono. Si está muy bajo, la alerta puede pasar desapercibida; conviene subirlo en Ajustes → Sonido → Volumen de alarma.
+- El mensaje de voz necesita que el motor de texto a voz del teléfono tenga la voz en español instalada. Google la descarga la primera vez que se usa (requiere internet en ese momento); mientras no esté disponible, suena el tono de respaldo.
 - Para publicar en Google Play hay que justificar el tipo de servicio `specialUse`. Para uso personal o académico no es necesario.
 
 ## Documentación

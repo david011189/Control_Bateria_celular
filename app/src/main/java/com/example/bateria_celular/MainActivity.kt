@@ -58,7 +58,10 @@ class MainActivity : AppCompatActivity() {
         colorFondoOriginal = obtainStyledAttributes(
             intArrayOf(androidx.appcompat.R.attr.colorButtonNormal)
         ).use { it.getColorStateList(0) }
-        mostrarEstado(prefs.getBoolean("monitor_activo", false))
+        val monitorActivo = prefs.getBoolean("monitor_activo", false)
+        // Si el sistema detuvo el servicio (p. ej. al actualizar la app), se vuelve a lanzar
+        if (monitorActivo) ContextCompat.startForegroundService(this, intentServicio)
+        mostrarEstado(monitorActivo)
 
         btnIniciar.setOnClickListener {
             ContextCompat.startForegroundService(this, intentServicio)
