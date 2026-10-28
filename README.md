@@ -118,6 +118,10 @@ adb logcat -s AlertaBateria
 
 El planteamiento, los antecedentes de código abierto, el diseño y el plan de pruebas están en [`Proyecto_Alerta_Bateria_Android.docx`](Proyecto_Alerta_Bateria_Android.docx).
 
+## Licencia
+
+Este proyecto se distribuye bajo la [licencia MIT](LICENSE): puedes usar, copiar, modificar y distribuir el código libremente, incluso con fines comerciales, siempre que conserves el aviso de autoría y la licencia.
+
 ## Autor
 
 Barlen Porfirio David Calderón Curi — Chincheros, Apurímac, Perú (2026).
