@@ -43,6 +43,10 @@ class BatteryMonitorService : Service() {
         private const val DURACION_SONIDO_MS = 8000L
         private const val VOLUMEN_ALERTA = 0.8f   // fracción del volumen máximo de alarma
         private const val TAG = "AlertaBateria"
+
+        // Volumen de alarma con el que las alertas se escuchan bien (6 de 7 en un Pixel)
+        fun volumenObjetivo(am: AudioManager): Int =
+            ceil(am.getStreamMaxVolume(AudioManager.STREAM_ALARM) * VOLUMEN_ALERTA).toInt()
     }
 
     private var alertaAltaEmitida = false
@@ -239,12 +243,14 @@ class BatteryMonitorService : Service() {
     }
 
     // ----- Volumen de alarma -----
-    // Sube el volumen de alarma mientras suena la alerta, si el usuario lo tiene más bajo
+    // Sube el volumen de alarma mientras suena la alerta, si el usuario lo tiene más bajo.
+    // Desde Android 17 el sistema ignora este cambio si la app no está en pantalla
+    // ("AudioHardening"); por eso MainActivity avisa cuando el volumen está bajo
     private fun subirVolumen() {
         if (volumenOriginal != null) return   // ya está subido por una alerta en curso
         val am = getSystemService(AudioManager::class.java)
         val actual = am.getStreamVolume(AudioManager.STREAM_ALARM)
-        val objetivo = ceil(am.getStreamMaxVolume(AudioManager.STREAM_ALARM) * VOLUMEN_ALERTA).toInt()
+        val objetivo = volumenObjetivo(am)
         if (actual >= objetivo) return
         try {
             am.setStreamVolume(AudioManager.STREAM_ALARM, objetivo, 0)

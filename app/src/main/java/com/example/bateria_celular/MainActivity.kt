@@ -7,9 +7,11 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.res.ColorStateList
 import android.graphics.Color
+import android.media.AudioManager
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
+import android.view.View
 import android.widget.Button
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
@@ -27,6 +29,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnIniciar: Button
     private lateinit var colorTextoOriginal: ColorStateList
     private var colorFondoOriginal: ColorStateList? = null
+    private lateinit var tvAvisoVolumen: TextView
+    private lateinit var btnSubirVolumen: Button
 
     // Actualiza el nivel en pantalla mientras la actividad está visible (RF01)
     private val receptorNivel = object : BroadcastReceiver() {
@@ -73,6 +77,24 @@ class MainActivity : AppCompatActivity() {
             prefs.edit { putBoolean("monitor_activo", false) }
             mostrarEstado(false)
         }
+
+        tvAvisoVolumen = findViewById(R.id.tvAvisoVolumen)
+        btnSubirVolumen = findViewById(R.id.btnSubirVolumen)
+        btnSubirVolumen.setOnClickListener {
+            // Con la app en pantalla Android sí permite cambiar el volumen
+            val am = getSystemService(AudioManager::class.java)
+            am.setStreamVolume(
+                AudioManager.STREAM_ALARM,
+                BatteryMonitorService.volumenObjetivo(am),
+                AudioManager.FLAG_SHOW_UI
+            )
+            comprobarVolumen()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        comprobarVolumen()   // el usuario pudo cambiar el volumen fuera de la app
     }
 
     override fun onStart() {
@@ -87,6 +109,19 @@ class MainActivity : AppCompatActivity() {
     override fun onStop() {
         unregisterReceiver(receptorNivel)
         super.onStop()
+    }
+
+    // Android no deja que el servicio suba el volumen en segundo plano, así que
+    // se avisa aquí si el volumen de alarma está bajo para que el usuario lo suba
+    private fun comprobarVolumen() {
+        val am = getSystemService(AudioManager::class.java)
+        val actual = am.getStreamVolume(AudioManager.STREAM_ALARM)
+        val maximo = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
+        val bajo = actual < BatteryMonitorService.volumenObjetivo(am)
+        tvAvisoVolumen.text = "⚠ El volumen de alarma está bajo ($actual de $maximo). " +
+            "Las alertas de voz suenan con este volumen y podrían no escucharse."
+        tvAvisoVolumen.visibility = if (bajo) View.VISIBLE else View.GONE
+        btnSubirVolumen.visibility = if (bajo) View.VISIBLE else View.GONE
     }
 
     private fun mostrarNivel(porcentaje: Int) {
